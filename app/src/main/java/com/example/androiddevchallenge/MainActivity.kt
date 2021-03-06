@@ -39,6 +39,7 @@ import androidx.compose.material.Text
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material.icons.filled.RestartAlt
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -62,7 +63,8 @@ import kotlin.math.sin
 enum class TimerState {
     IDLE,
     STARTED,
-    STOPPED;
+    STOPPED,
+    COMPLETE;
 }
 
 data class Timer(
@@ -71,6 +73,7 @@ data class Timer(
     val reset: Boolean,
     val timerState: TimerState
 )
+
 private const val timeFormat = "%02d"
 
 class MainActivity : AppCompatActivity() {
@@ -98,13 +101,30 @@ fun TimerScreen() {
             TimerCircle(
                 timer.value,
                 onProgress = {
-                    timer.value = timer.value.copy(progress = it)
+                    if (it == 1.0f) {
+                        timer.value = timer.value.copy(
+                            progress = it,
+                            timerState = TimerState.COMPLETE
+                        )
+                    } else {
+                        timer.value = timer.value.copy(progress = it)
+                    }
                 },
                 onReset = {
                     timer.value = timer.value.copy(progress = 0f, reset = true)
                     scope.launch {
                         delay(300)
-                        timer.value = timer.value.copy(reset = false)
+                        when (timer.value.timerState) {
+                            TimerState.COMPLETE -> {
+                                timer.value = timer.value.copy(
+                                    reset = false,
+                                    timerState = TimerState.IDLE
+                                )
+                            }
+                            else -> {
+                                timer.value = timer.value.copy(reset = false)
+                            }
+                        }
                     }
                 },
                 modifier = Modifier.padding(64.dp)
@@ -124,6 +144,12 @@ fun TimerScreen() {
                                     timerState = TimerState.STOPPED
                                 )
                             }
+                            TimerState.COMPLETE -> {
+                                timer.value = timer.value.copy(
+                                    progress = 0.0f,
+                                    timerState = TimerState.STARTED
+                                )
+                            }
                             else -> {
                                 timer.value = timer.value.copy(
                                     timerState = TimerState.STARTED
@@ -139,6 +165,7 @@ fun TimerScreen() {
                     val iconAsset: ImageVector =
                         when (timer.value.timerState) {
                             TimerState.STARTED -> Icons.Default.Pause
+                            TimerState.COMPLETE -> Icons.Default.RestartAlt
                             else -> Icons.Default.PlayArrow
                         }
                     Icon(
