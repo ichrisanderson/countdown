@@ -16,18 +16,21 @@
 package com.example.androiddevchallenge
 
 import android.os.Bundle
-import android.text.format.DateUtils
 import androidx.activity.compose.setContent
 import androidx.appcompat.app.AppCompatActivity
 import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.LinearEasing
+import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.aspectRatio
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.shape.CircleShape
@@ -41,10 +44,12 @@ import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.RestartAlt
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.drawscope.Fill
@@ -74,8 +79,6 @@ data class Timer(
     val timerState: TimerState
 )
 
-private const val timeFormat = "%02d"
-
 class MainActivity : AppCompatActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -89,7 +92,7 @@ class MainActivity : AppCompatActivity() {
 fun TimerScreen() {
     val timer = mutableStateOf(
         Timer(
-            duration = TimeUnit.SECONDS.toMillis(30).toInt(),
+            duration = TimeUnit.SECONDS.toMillis(5).toInt(),
             progress = 0f,
             reset = false,
             timerState = TimerState.IDLE
@@ -97,8 +100,13 @@ fun TimerScreen() {
     )
     val scope = rememberCoroutineScope()
     MyTheme {
-        Column {
-            TimerCircle(
+        ConstraintLayout(
+            Modifier
+                .fillMaxWidth()
+                .fillMaxHeight()
+        ) {
+            val (circle, bottomRow) = createRefs()
+            Countdown(
                 timer.value,
                 onProgress = {
                     if (it == 1.0f) {
@@ -115,7 +123,7 @@ fun TimerScreen() {
                     scope.launch {
                         delay(300)
                         when (timer.value.timerState) {
-                            TimerState.COMPLETE -> {
+                            TimerState.STOPPED -> {
                                 timer.value = timer.value.copy(
                                     reset = false,
                                     timerState = TimerState.IDLE
@@ -127,13 +135,23 @@ fun TimerScreen() {
                         }
                     }
                 },
-                modifier = Modifier.padding(64.dp)
+                modifier = Modifier
+                    .constrainAs(circle) {
+                        start.linkTo(parent.start)
+                        end.linkTo(parent.end)
+                        top.linkTo(parent.top)
+                        bottom.linkTo(bottomRow.top)
+                    }
+                    .padding(64.dp)
             )
-            Spacer(Modifier.weight(1.0f))
             Row(
                 horizontalArrangement = Arrangement.Center,
                 modifier = Modifier
-                    .fillMaxWidth()
+                    .constrainAs(bottomRow) {
+                        start.linkTo(parent.start)
+                        end.linkTo(parent.end)
+                        bottom.linkTo(parent.bottom)
+                    }
                     .padding(16.dp),
             ) {
                 Button(
@@ -179,13 +197,12 @@ fun TimerScreen() {
 }
 
 @Composable
-fun TimerCircle(
+fun Countdown(
     timer: Timer,
     onProgress: (progress: Float) -> Unit,
     onReset: () -> Unit,
     modifier: Modifier = Modifier
 ) {
-
     ConstraintLayout(modifier) {
         val (clock, text, button) = createRefs()
         val circularProgressModifier = Modifier
@@ -196,6 +213,7 @@ fun TimerCircle(
                 top.linkTo(parent.top)
             }
         val remainingTime = (timer.duration - (timer.duration * timer.progress).toInt()).toLong()
+
         when (timer.timerState) {
             TimerState.STARTED -> {
                 AnimatingCircularProgress(
@@ -211,17 +229,31 @@ fun TimerCircle(
                 )
             }
         }
-
-        val hours = (remainingTime / DateUtils.HOUR_IN_MILLIS).toInt()
-        var remainder = (remainingTime % DateUtils.HOUR_IN_MILLIS).toInt()
-        val minutes = (remainder / DateUtils.MINUTE_IN_MILLIS).toInt()
-        remainder = (remainder % DateUtils.MINUTE_IN_MILLIS).toInt()
-        val seconds = (remainingTime / DateUtils.SECOND_IN_MILLIS).toInt()
-        remainder = (remainder % DateUtils.SECOND_IN_MILLIS).toInt()
+        val infiniteTransition = rememberInfiniteTransition()
+        val color = when (timer.timerState) {
+            TimerState.COMPLETE,
+            TimerState.STOPPED -> {
+                val color by infiniteTransition.animateFloat(
+                    initialValue = 1.0f,
+                    targetValue = 0.0f,
+                    animationSpec = infiniteRepeatable(
+                        animation = tween(700, 350, easing = FastOutSlowInEasing),
+                        repeatMode = RepeatMode.Restart
+                    )
+                )
+                color
+            }
+            else -> {
+                1.0f
+            }
+        }
         Text(
-            text = "${timeFormat.format(minutes)}:${timeFormat.format(seconds)}",
-            style = MaterialTheme.typography.h2.copy(color = MaterialTheme.colors.secondary),
+            text = Utils.timeString(remainingTime),
+            style = MaterialTheme.typography.h2.copy(
+                color = MaterialTheme.colors.secondary
+            ),
             modifier = Modifier
+                .alpha(color)
                 .constrainAs(text) {
                     start.linkTo(parent.start)
                     end.linkTo(parent.end)
@@ -250,7 +282,7 @@ fun TimerCircle(
 fun AnimatingCircularProgress(
     timer: Timer,
     onProgress: (progress: Float) -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier
 ) {
     val scope = rememberCoroutineScope()
     val progress = remember { Animatable(timer.progress) }
@@ -276,9 +308,9 @@ fun AnimatingCircularProgress(
 @Composable
 fun CircularProgress(
     currentProgress: Float,
-    modifier: Modifier = Modifier
+    modifier: Modifier
 ) {
-    val secondaryColor = MaterialTheme.colors.secondary
+    val progressColor = MaterialTheme.colors.secondary
     Canvas(modifier = modifier) {
         val xCenter = size.width / 2
         val yCenter = size.height / 2
@@ -305,10 +337,10 @@ fun CircularProgress(
             sweepAngle = dotAngleDegrees - 270f,
             useCenter = false,
             style = Stroke(4.dp.toPx()),
-            color = secondaryColor
+            color = progressColor
         )
         drawCircle(
-            color = secondaryColor,
+            color = progressColor,
             center = Offset(dotX, dotY),
             radius = 16f,
             style = Fill
