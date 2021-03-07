@@ -82,6 +82,7 @@ data class Timer(
 class MainActivity : AppCompatActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+
         setContent {
             TimerScreen()
         }
@@ -105,7 +106,7 @@ fun TimerScreen() {
                 .fillMaxWidth()
                 .fillMaxHeight()
         ) {
-            val (circle, bottomRow) = createRefs()
+            val (countdown, bottomRow) = createRefs()
             Countdown(
                 timer.value,
                 onProgress = {
@@ -123,7 +124,8 @@ fun TimerScreen() {
                     scope.launch {
                         delay(300)
                         when (timer.value.timerState) {
-                            TimerState.STOPPED -> {
+                            TimerState.STOPPED,
+                            TimerState.COMPLETE -> {
                                 timer.value = timer.value.copy(
                                     reset = false,
                                     timerState = TimerState.IDLE
@@ -136,7 +138,7 @@ fun TimerScreen() {
                     }
                 },
                 modifier = Modifier
-                    .constrainAs(circle) {
+                    .constrainAs(countdown) {
                         start.linkTo(parent.start)
                         end.linkTo(parent.end)
                         top.linkTo(parent.top)
@@ -204,16 +206,15 @@ fun Countdown(
     modifier: Modifier = Modifier
 ) {
     ConstraintLayout(modifier) {
-        val (clock, text, button) = createRefs()
+        val (progress, timeText, timeUp, button) = createRefs()
         val circularProgressModifier = Modifier
             .aspectRatio(1.0f)
-            .constrainAs(clock) {
+            .constrainAs(progress) {
                 start.linkTo(parent.start)
                 end.linkTo(parent.end)
                 top.linkTo(parent.top)
             }
         val remainingTime = (timer.duration - (timer.duration * timer.progress).toInt()).toLong()
-
         when (timer.timerState) {
             TimerState.STARTED -> {
                 AnimatingCircularProgress(
@@ -254,12 +255,27 @@ fun Countdown(
             ),
             modifier = Modifier
                 .alpha(color)
-                .constrainAs(text) {
+                .constrainAs(timeText) {
                     start.linkTo(parent.start)
                     end.linkTo(parent.end)
                     top.linkTo(parent.top, margin = 64.dp)
                 }
         )
+        if (timer.timerState == TimerState.COMPLETE) {
+            Text(
+                text = "Time Up!",
+                style = MaterialTheme.typography.h6.copy(
+                    color = MaterialTheme.colors.secondary
+                ),
+                modifier = Modifier
+                    .alpha(color)
+                    .constrainAs(timeUp) {
+                        start.linkTo(timeText.start)
+                        end.linkTo(timeText.end)
+                        top.linkTo(timeText.bottom)
+                    }
+            )
+        }
         Button(
             onClick = onReset,
             shape = CircleShape,
@@ -270,7 +286,7 @@ fun Countdown(
                 .constrainAs(button) {
                     start.linkTo(parent.start)
                     end.linkTo(parent.end)
-                    top.linkTo(parent.bottom, margin = (-80).dp)
+                    top.linkTo(parent.bottom, margin = (-56).dp)
                 }
         ) {
             Text(text = "Reset", color = MaterialTheme.colors.secondary)
